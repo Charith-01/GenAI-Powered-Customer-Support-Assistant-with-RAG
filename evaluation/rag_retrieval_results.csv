@@ -1,0 +1,6 @@
+question,expected_source,predicted_source,correct,score
+How long does a refund take?,refund_policy.txt,refund_policy.txt,True,0.49972137227801977
+I was charged twice.,payment_policy.txt,refund_policy.txt,False,0.0
+My package has not arrived.,delivery_policy.txt,delivery_policy.txt,True,0.2602040343358706
+Please cancel my order.,cancellation_policy.txt,cancellation_policy.txt,True,0.40097735398628165
+I cannot log into my account.,account_policy.txt,account_policy.txt,True,0.3833973421860203

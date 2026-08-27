@@ -1,0 +1,11 @@
+Payment Policy
+
+Customers should report failed payments, duplicate charges, or incorrect payment amounts to the support team.
+
+Duplicate charges should be treated as a high-priority payment issue and investigated promptly.
+
+Customers may be asked to provide their order number and transaction details.
+
+Support agents should verify the transaction before confirming refunds or payment reversals.
+
+Customers should never be asked to provide full card numbers, passwords, or security codes.

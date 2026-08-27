@@ -1,0 +1,11 @@
+Account Support Policy
+
+Customers who cannot access their account may request password reset assistance.
+
+Customers should use the registered email address when recovering an account.
+
+Support agents must not ask customers to provide their password.
+
+Suspicious account activity or possible unauthorized access should be treated as a high-priority security issue.
+
+Customers experiencing suspected account compromise should be directed to secure their account immediately.
