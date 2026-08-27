@@ -1,0 +1,2 @@
+model,task,accuracy,macro_precision,macro_recall,macro_f1
+TF-IDF + Logistic Regression,intent_classification,0.9922751059058061,0.9926278738544133,0.9922118405916622,0.9923252353780668
