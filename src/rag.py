@@ -13,9 +13,9 @@ from src.config import (
 )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Configuration
-# ---------------------------------------------------------
+# =========================================================
 
 validate_config()
 
@@ -30,19 +30,20 @@ KNOWLEDGE_BASE_PATH = (
 )
 
 
-# ---------------------------------------------------------
-# Load knowledge-base documents
-# ---------------------------------------------------------
+# =========================================================
+# Load knowledge base
+# =========================================================
 
 def load_knowledge_base():
     """
-    Load all .txt policy documents from the
-    knowledge_base directory.
+    Load all text documents from the knowledge base.
     """
 
     documents = []
 
-    for file_path in KNOWLEDGE_BASE_PATH.glob("*.txt"):
+    for file_path in sorted(
+        KNOWLEDGE_BASE_PATH.glob("*.txt")
+    ):
 
         text = file_path.read_text(
             encoding="utf-8"
@@ -62,9 +63,9 @@ def load_knowledge_base():
     return documents
 
 
-# ---------------------------------------------------------
-# Split documents into chunks
-# ---------------------------------------------------------
+# =========================================================
+# Chunk documents
+# =========================================================
 
 def chunk_documents(documents):
     """
@@ -92,9 +93,9 @@ def chunk_documents(documents):
     return chunks
 
 
-# ---------------------------------------------------------
-# Build TF-IDF retriever
-# ---------------------------------------------------------
+# =========================================================
+# Build local TF-IDF index
+# =========================================================
 
 documents = load_knowledge_base()
 
@@ -107,30 +108,132 @@ chunk_texts = [
     for chunk in chunks
 ]
 
-
 vectorizer = TfidfVectorizer(
     lowercase=True,
     ngram_range=(1, 2),
     stop_words="english"
 )
 
-
 chunk_vectors = vectorizer.fit_transform(
     chunk_texts
 )
 
 
-# ---------------------------------------------------------
-# Retrieve relevant knowledge
-# ---------------------------------------------------------
+# =========================================================
+# Business keyword routing
+# =========================================================
+
+POLICY_KEYWORDS = {
+
+    "payment_policy.txt": [
+        "charged twice",
+        "duplicate charge",
+        "charged",
+        "charge",
+        "payment",
+        "paid",
+        "billing",
+        "transaction",
+        "card",
+    ],
+
+    "refund_policy.txt": [
+        "refund",
+        "money back",
+        "returned",
+        "return",
+        "reimbursement",
+    ],
+
+    "delivery_policy.txt": [
+        "delivery",
+        "delivered",
+        "package",
+        "parcel",
+        "shipment",
+        "shipping",
+        "tracking",
+        "arrive",
+        "arrived",
+        "late delivery",
+    ],
+
+    "cancellation_policy.txt": [
+        "cancel order",
+        "cancel",
+        "cancellation",
+        "stop my order",
+        "stop order",
+    ],
+
+    "account_policy.txt": [
+        "account",
+        "login",
+        "log in",
+        "sign in",
+        "password",
+        "access my account",
+        "cannot access",
+        "hacked",
+        "unauthorized access",
+    ],
+}
+
+
+def detect_policy_from_keywords(query):
+    """
+    Identify the most likely policy using business keywords.
+
+    Returns
+    -------
+    str or None
+        Best matching policy filename.
+    """
+
+    query_lower = query.lower()
+
+    policy_scores = {}
+
+    for policy, keywords in POLICY_KEYWORDS.items():
+
+        score = 0
+
+        for keyword in keywords:
+
+            if keyword in query_lower:
+                score += 1
+
+        policy_scores[policy] = score
+
+    best_policy = max(
+        policy_scores,
+        key=policy_scores.get
+    )
+
+    if policy_scores[best_policy] == 0:
+        return None
+
+    return best_policy
+
+
+# =========================================================
+# Retrieve relevant context
+# =========================================================
 
 def retrieve_context(
     query,
     top_k=3
 ):
     """
-    Retrieve the top-k policy chunks most relevant
-    to a customer query.
+    Retrieve relevant policy chunks.
+
+    Uses:
+    1. Business keyword routing
+    2. TF-IDF similarity
+
+    If keyword routing identifies a policy, chunks from
+    that policy are prioritized. Otherwise retrieval falls
+    back to global TF-IDF similarity.
     """
 
     query = str(query).strip()
@@ -139,6 +242,10 @@ def retrieve_context(
         raise ValueError(
             "Query cannot be empty."
         )
+
+    # -----------------------------------------------------
+    # TF-IDF similarity
+    # -----------------------------------------------------
 
     query_vector = vectorizer.transform(
         [query]
@@ -149,31 +256,61 @@ def retrieve_context(
         chunk_vectors
     )[0]
 
-    ranked_indices = similarities.argsort()[::-1]
+    # -----------------------------------------------------
+    # Keyword-based policy selection
+    # -----------------------------------------------------
 
-    results = []
+    preferred_policy = detect_policy_from_keywords(
+        query
+    )
 
-    for index in ranked_indices[:top_k]:
+    scored_results = []
 
-        results.append({
-            "source": chunks[index]["source"],
+    for index, similarity in enumerate(
+        similarities
+    ):
+
+        source = chunks[index]["source"]
+
+        # Strong routing bonus if the chunk belongs
+        # to the business policy selected by keywords.
+        routing_bonus = 0.0
+
+        if (
+            preferred_policy is not None
+            and source == preferred_policy
+        ):
+            routing_bonus = 1.0
+
+        selection_score = (
+            float(similarity)
+            + routing_bonus
+        )
+
+        scored_results.append({
+            "source": source,
             "text": chunks[index]["text"],
-            "score": float(
-                similarities[index]
-            )
+            "similarity_score": float(similarity),
+            "selection_score": selection_score
         })
+
+    scored_results.sort(
+        key=lambda item: item["selection_score"],
+        reverse=True
+    )
+
+    results = scored_results[:top_k]
 
     return results
 
 
-# ---------------------------------------------------------
-# Build RAG context
-# ---------------------------------------------------------
+# =========================================================
+# Format retrieved context
+# =========================================================
 
 def format_context(retrieved_chunks):
     """
-    Convert retrieved chunks into context
-    that can be sent to Gemini.
+    Format retrieved chunks for Gemini.
     """
 
     context_parts = []
@@ -190,17 +327,17 @@ def format_context(retrieved_chunks):
     )
 
 
-# ---------------------------------------------------------
-# Generate grounded Gemini response
-# ---------------------------------------------------------
+# =========================================================
+# Generate RAG response
+# =========================================================
 
 def generate_rag_response(
     customer_message,
     top_k=3
 ):
     """
-    Generate a customer-support response grounded
-    in retrieved company policy.
+    Generate a Gemini response grounded in
+    retrieved company policies.
     """
 
     customer_message = str(
@@ -212,6 +349,10 @@ def generate_rag_response(
             "Customer message cannot be empty."
         )
 
+    # -----------------------------------------------------
+    # Retrieve evidence
+    # -----------------------------------------------------
+
     retrieved_chunks = retrieve_context(
         customer_message,
         top_k=top_k
@@ -221,24 +362,29 @@ def generate_rag_response(
         retrieved_chunks
     )
 
+    # -----------------------------------------------------
+    # RAG prompt
+    # -----------------------------------------------------
+
     prompt = f"""
 You are a professional customer support assistant.
 
-Answer the customer's request using the company policy
-information provided below.
+Answer the customer's request using ONLY the relevant
+company policy information provided below.
 
 IMPORTANT RULES:
 
-1. Use the provided context as the source of
-   company-specific facts.
+1. Use the supplied company policy as the source of
+   company-specific information.
 2. Do not invent company policies.
 3. Do not invent refund periods, delivery times,
    payment rules, or cancellation rules.
-4. If the provided context does not contain enough
-   information, say that the issue requires verification.
-5. Keep the response concise and professional.
-6. Do not claim that an action has already been completed.
-7. Do not expose internal technical details.
+4. Do not claim an action has already been completed.
+5. If the supplied information is insufficient,
+   say that additional verification is required.
+6. Keep the response concise, helpful, and professional.
+7. Never request passwords, full card numbers,
+   or security codes.
 
 COMPANY POLICY CONTEXT:
 
@@ -248,8 +394,12 @@ CUSTOMER MESSAGE:
 
 {customer_message}
 
-Generate a helpful customer-support response.
+Generate a professional customer support response.
 """
+
+    # -----------------------------------------------------
+    # Gemini generation
+    # -----------------------------------------------------
 
     try:
 
@@ -267,10 +417,16 @@ Generate a helpful customer-support response.
             f"RAG generation failed: {error}"
         ) from error
 
-    if response is None or not response.text:
+    if response is None:
 
         raise RuntimeError(
-            "Gemini returned an empty RAG response."
+            "Gemini returned no response."
+        )
+
+    if not response.text:
+
+        raise RuntimeError(
+            "Gemini returned an empty response."
         )
 
     return {
